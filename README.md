@@ -1,2 +1,665 @@
-# Juego-para-dylan
-Te amo mucho Tonoto, espero que este juego te ayude a no aburrirte tanto, lo hice yo. te amooooooooooooooooo besotes. Atentamente, Zoé
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Love Runner - Minecraft Style</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            overflow: hidden;
+            font-family: 'Courier New', monospace;
+            background: linear-gradient(to bottom, #FFB6D9 0%, #FFC9E3 100%);
+        }
+        
+        #gameCanvas {
+            display: block;
+            margin: 0 auto;
+            background: linear-gradient(to bottom, #FFB6D9 0%, #FFC9E3 100%);
+            image-rendering: pixelated;
+        }
+        
+        #gameOver, #victory {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(255, 255, 255, 0.95);
+            padding: 40px;
+            border-radius: 20px;
+            text-align: center;
+            display: none;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+            z-index: 100;
+        }
+        
+        #gameOver h1, #victory h1 {
+            color: #FF1493;
+            font-size: 48px;
+            margin-bottom: 20px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.2);
+        }
+        
+        #gameOver p, #victory p {
+            font-size: 24px;
+            margin: 10px 0;
+            color: #333;
+        }
+        
+        button {
+            background: #FF1493;
+            color: white;
+            border: none;
+            padding: 15px 40px;
+            font-size: 20px;
+            border-radius: 10px;
+            cursor: pointer;
+            margin-top: 20px;
+            font-family: 'Courier New', monospace;
+            transition: all 0.3s;
+        }
+        
+        button:hover {
+            background: #FF69B4;
+            transform: scale(1.1);
+        }
+        
+        #score {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            font-size: 24px;
+            color: white;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+            font-weight: bold;
+        }
+        
+        #instructions {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            font-size: 18px;
+            color: white;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+            background: rgba(255, 20, 147, 0.7);
+            padding: 15px;
+            border-radius: 10px;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="gameCanvas"></canvas>
+    <div id="score">Distancia: 0m</div>
+    <div id="instructions">Presiona ESPACIO o toca para saltar ❤️</div>
+    
+    <div id="gameOver">
+        <h1>💔 ¡Oh no!</h1>
+        <p>Te encontraste con alguien más...</p>
+        <p id="finalScore"></p>
+        <button onclick="restartGame()">Intentar de nuevo</button>
+    </div>
+    
+    <div id="victory">
+        <h1>💕 ¡AMOR VERDADERO! 💕</h1>
+        <p>¡Llegaste con tu girlfriend!</p>
+        <p id="victoryScore"></p>
+        <button onclick="restartGame()">Jugar otra vez</button>
+    </div>
+    
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        
+        canvas.width = 1200;
+        canvas.height = 600;
+        
+        // Game state
+        let gameState = 'playing'; // playing, gameOver, victory, kissing
+        let score = 0;
+        let speed = 5;
+        let obstacleFrequency = 120;
+        let frameCount = 0;
+        
+        // Player
+        const player = {
+            x: 150,
+            y: 400,
+            width: 40,
+            height: 60,
+            velocityY: 0,
+            jumping: false,
+            gravity: 0.8,
+            jumpPower: -16,
+            runFrame: 0
+        };
+        
+        // Obstacles (girls)
+        let obstacles = [];
+        
+        // Hearts
+        let hearts = [];
+        let celebrationHearts = [];
+        
+        // Clouds
+        let clouds = [];
+        
+        // Victory elements
+        let victorySign = null;
+        let girlfriend = null;
+        let kissAnimation = 0;
+        
+        // Initialize clouds
+        for (let i = 0; i < 8; i++) {
+            clouds.push({
+                x: Math.random() * canvas.width,
+                y: Math.random() * 200,
+                size: 40 + Math.random() * 40,
+                speed: 0.5 + Math.random() * 1
+            });
+        }
+        
+        // Initialize background hearts
+        for (let i = 0; i < 20; i++) {
+            hearts.push({
+                x: Math.random() * canvas.width,
+                y: Math.random() * canvas.height,
+                size: 15 + Math.random() * 25,
+                speed: 0.3 + Math.random() * 0.7,
+                opacity: 0.3 + Math.random() * 0.4
+            });
+        }
+        
+        // Draw cubic character (Minecraft style)
+        function drawPlayer(x, y) {
+            // Legs animation
+            const legOffset = Math.sin(player.runFrame * 0.2) * 5;
+            
+            // Left leg (black pants)
+            ctx.fillStyle = '#000000';
+            ctx.fillRect(x + 8, y + 40, 10, 20);
+            
+            // Right leg (black pants)
+            ctx.fillRect(x + 22, y + 40 - legOffset, 10, 20);
+            
+            // Body (red shirt)
+            ctx.fillStyle = '#FF0000';
+            ctx.fillRect(x + 5, y + 20, 30, 20);
+            
+            // Arms
+            ctx.fillStyle = '#FFDBAC';
+            ctx.fillRect(x, y + 22, 5, 15);
+            ctx.fillRect(x + 35, y + 22, 5, 15);
+            
+            // Head (skin tone)
+            ctx.fillStyle = '#FFDBAC';
+            ctx.fillRect(x + 8, y, 24, 24);
+            
+            // Hair
+            ctx.fillStyle = '#4A2511';
+            ctx.fillRect(x + 8, y - 4, 24, 8);
+            
+            // Eyes with sparkle
+            ctx.fillStyle = '#000000';
+            ctx.fillRect(x + 12, y + 8, 4, 4);
+            ctx.fillRect(x + 24, y + 8, 4, 4);
+            
+            // Eye sparkles
+            ctx.fillStyle = '#FFFFFF';
+            ctx.fillRect(x + 13, y + 9, 2, 2);
+            ctx.fillRect(x + 25, y + 9, 2, 2);
+            
+            // BIG HAPPY SMILE - SUPER VISIBLE
+           // BIG HAPPY SMILE (CUTE & LOVE MODE)
+ctx.fillStyle = '#000000';
+
+// Main smile
+ctx.fillRect(x + 14, y + 17, 12, 2);
+
+// Smile corners up
+ctx.fillRect(x + 13, y + 16, 2, 2);
+ctx.fillRect(x + 26, y + 16, 2, 2);
+
+// Bottom curve
+ctx.fillRect(x + 15, y + 19, 8, 2);
+
+            
+            // Red shoes
+            ctx.fillStyle = '#FF0000';
+            ctx.fillRect(x + 6, y + 58, 12, 6);
+            ctx.fillRect(x + 22, y + 58 - legOffset, 12, 6);
+        }
+        
+        // Draw obstacle (girl) - with blue dress and 004
+        function drawGirl(x, y) {
+            // Legs
+            ctx.fillStyle = '#FFDBAC';
+            ctx.fillRect(x + 10, y + 45, 8, 15);
+            ctx.fillRect(x + 22, y + 45, 8, 15);
+            
+            // Blue dress with number
+            ctx.fillStyle = '#0047AB';
+            ctx.fillRect(x + 5, y + 25, 30, 20);
+            
+            // Number 004
+            ctx.fillStyle = '#FFFFFF';
+            ctx.font = 'bold 10px Arial';
+            ctx.fillText('004', x + 10, y + 38);
+            
+            // Arms
+            ctx.fillStyle = '#FFDBAC';
+            ctx.fillRect(x, y + 27, 5, 12);
+            ctx.fillRect(x + 35, y + 27, 5, 12);
+            
+            // Head
+            ctx.fillStyle = '#FFDBAC';
+            ctx.fillRect(x + 10, y + 5, 20, 20);
+            
+            // Long hair
+            ctx.fillStyle = '#3D1F00';
+            ctx.fillRect(x + 8, y + 3, 24, 8);
+            ctx.fillRect(x + 5, y + 10, 30, 18);
+            
+            // Eyes (closed/cute)
+            ctx.fillStyle = '#000000';
+            ctx.fillRect(x + 14, y + 12, 4, 2);
+            ctx.fillRect(x + 22, y + 12, 4, 2);
+            
+            // Smile
+            ctx.fillRect(x + 16, y + 18, 8, 2);
+            
+            // Shoes
+            ctx.fillStyle = '#FFB6C1';
+            ctx.fillRect(x + 8, y + 58, 10, 5);
+            ctx.fillRect(x + 22, y + 58, 10, 5);
+        }
+        
+        // Draw girlfriend - special character with pink dress, black medium hair, light brown skin
+        function drawGirlfriend(x, y) {
+            // Legs (light brown skin)
+            ctx.fillStyle = '#D4A574';
+            ctx.fillRect(x + 10, y + 45, 8, 15);
+            ctx.fillRect(x + 22, y + 45, 8, 15);
+            
+            // Pink dress
+            ctx.fillStyle = '#FFB6D9';
+            ctx.fillRect(x + 5, y + 25, 30, 20);
+            
+            // Dress details (lighter pink)
+            ctx.fillStyle = '#FFC9E3';
+            ctx.fillRect(x + 8, y + 28, 6, 15);
+            ctx.fillRect(x + 26, y + 28, 6, 15);
+            
+            // Arms (light brown skin)
+            ctx.fillStyle = '#D4A574';
+            ctx.fillRect(x, y + 27, 5, 12);
+            ctx.fillRect(x + 35, y + 27, 5, 12);
+            
+            // Head (light brown skin)
+            ctx.fillStyle = '#D4A574';
+            ctx.fillRect(x + 10, y + 5, 20, 20);
+            
+            // Medium length black hair (only on top and sides, not covering face)
+            ctx.fillStyle = '#1A1A1A';
+            ctx.fillRect(x + 8, y + 3, 24, 8); // top of head
+            ctx.fillRect(x + 5, y + 8, 5, 12); // left side
+            ctx.fillRect(x + 30, y + 8, 5, 12); // right side
+            
+            // Eyes (open and happy with sparkle)
+            ctx.fillStyle = '#000000';
+            ctx.fillRect(x + 13, y + 10, 4, 4);
+            ctx.fillRect(x + 23, y + 10, 4, 4);
+            
+            // Eye sparkles
+            ctx.fillStyle = '#FFFFFF';
+            ctx.fillRect(x + 14, y + 11, 2, 2);
+            ctx.fillRect(x + 24, y + 11, 2, 2);
+            
+            // BIG HAPPY SMILE - SUPER VISIBLE
+            // BIG HAPPY SMILE (CURVED & CUTE)
+ctx.fillStyle = '#000000';
+
+// Main smile
+ctx.fillRect(x + 13, y + 16, 14, 2);
+
+// Smile corners up
+ctx.fillRect(x + 12, y + 15, 2, 2);
+ctx.fillRect(x + 27, y + 15, 2, 2);
+
+// Bottom curve
+ctx.fillRect(x + 14, y + 18, 10, 2);
+
+            // White shoes
+            ctx.fillStyle = '#FFFFFF';
+            ctx.fillRect(x + 8, y + 58, 10, 5);
+            ctx.fillRect(x + 22, y + 58, 10, 5);
+            
+            // Shoe outline
+            ctx.strokeStyle = '#CCCCCC';
+            ctx.lineWidth = 1;
+            ctx.strokeRect(x + 8, y + 58, 10, 5);
+            ctx.strokeRect(x + 22, y + 58, 10, 5);
+        }
+        
+        // Draw heart shape
+        function drawHeart(x, y, size) {
+            ctx.beginPath();
+            const topCurveHeight = size * 0.3;
+            ctx.moveTo(x, y + topCurveHeight);
+            ctx.bezierCurveTo(x, y, x - size / 2, y, x - size / 2, y + topCurveHeight);
+            ctx.bezierCurveTo(x - size / 2, y + (size + topCurveHeight) / 2, x, y + (size + topCurveHeight) / 1.2, x, y + size);
+            ctx.bezierCurveTo(x, y + (size + topCurveHeight) / 1.2, x + size / 2, y + (size + topCurveHeight) / 2, x + size / 2, y + topCurveHeight);
+            ctx.bezierCurveTo(x + size / 2, y, x, y, x, y + topCurveHeight);
+            ctx.fill();
+        }
+        
+        // Draw cloud heart
+        function drawCloudHeart(x, y, size) {
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+            ctx.beginPath();
+            ctx.arc(x - size/3, y, size/2, 0, Math.PI * 2);
+            ctx.arc(x + size/3, y, size/2, 0, Math.PI * 2);
+            ctx.arc(x, y + size/3, size/2, 0, Math.PI * 2);
+            ctx.fill();
+        }
+        
+        // Draw victory sign
+        function drawVictorySign(x, y) {
+            // Sign post
+            ctx.fillStyle = '#8B4513';
+            ctx.fillRect(x + 70, y + 60, 10, 100);
+            
+            // Sign board
+            ctx.fillStyle = '#FFB6D9';
+            ctx.fillRect(x, y, 150, 70);
+            ctx.strokeStyle = '#FF1493';
+            ctx.lineWidth = 4;
+            ctx.strokeRect(x, y, 150, 70);
+            
+            // Text
+            ctx.fillStyle = '#FF1493';
+            ctx.font = 'bold 16px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText('¡Llegaste con', x + 75, y + 28);
+            ctx.fillText('tu girlfriend!', x + 75, y + 50);
+            ctx.textAlign = 'left';
+        }
+        
+        // Jump
+        function jump() {
+            if (!player.jumping && gameState === 'playing') {
+                player.velocityY = player.jumpPower;
+                player.jumping = true;
+                
+                // Create jump heart
+                celebrationHearts.push({
+                    x: player.x + 20,
+                    y: player.y + 10,
+                    size: 15,
+                    velocityY: -3,
+                    life: 30
+                });
+            }
+        }
+        
+        // Input handlers
+        document.addEventListener('keydown', (e) => {
+            if (e.code === 'Space') {
+                e.preventDefault();
+                jump();
+            }
+        });
+        
+        canvas.addEventListener('click', jump);
+        canvas.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            jump();
+        });
+        
+        function restartGame() {
+            gameState = 'playing';
+            score = 0;
+            speed = 5;
+            obstacleFrequency = 120;
+            frameCount = 0;
+            obstacles = [];
+            celebrationHearts = [];
+            player.y = 400;
+            player.velocityY = 0;
+            player.jumping = false;
+            victorySign = null;
+            girlfriend = null;
+            kissAnimation = 0;
+            document.getElementById('gameOver').style.display = 'none';
+            document.getElementById('victory').style.display = 'none';
+            document.getElementById('instructions').style.display = 'block';
+        }
+        
+        function checkVictory() {
+            if (score >= 1500 && !victorySign) {
+                gameState = 'approaching';
+                victorySign = {
+                    x: canvas.width + 200,
+                    y: 320
+                };
+                girlfriend = {
+                    x: canvas.width + 280,
+                    y: 400
+                };
+            }
+        }
+        
+        function update() {
+            if (gameState === 'gameOver' || gameState === 'won') return;
+            
+            frameCount++;
+            
+            if (gameState === 'playing') {
+                // Update score
+                score += 0.1;
+                document.getElementById('score').textContent = `Distancia: ${Math.floor(score)}m`;
+                
+                // Increase difficulty
+                if (frameCount % 300 === 0) {
+                    speed += 0.5;
+                    obstacleFrequency = Math.max(60, obstacleFrequency - 5);
+                }
+                
+                // Player physics
+                player.velocityY += player.gravity;
+                player.y += player.velocityY;
+                
+                if (player.y >= 400) {
+                    player.y = 400;
+                    player.velocityY = 0;
+                    player.jumping = false;
+                }
+                
+                player.runFrame++;
+                
+                // Spawn obstacles
+                if (frameCount % obstacleFrequency === 0 && score < 450) {
+                    obstacles.push({
+                        x: canvas.width,
+                        y: 400,
+                        width: 40,
+                        height: 60
+                    });
+                }
+                
+                // Update obstacles
+                obstacles.forEach((obs, index) => {
+                    obs.x -= speed;
+                    
+                    // Collision detection
+                    if (player.x < obs.x + obs.width &&
+                        player.x + player.width > obs.x &&
+                        player.y < obs.y + obs.height &&
+                        player.y + player.height > obs.y) {
+                        gameState = 'gameOver';
+                        document.getElementById('finalScore').textContent = `Llegaste a ${Math.floor(score)}m`;
+                        document.getElementById('gameOver').style.display = 'block';
+                        document.getElementById('instructions').style.display = 'none';
+                    }
+                    
+                    if (obs.x < -obs.width) {
+                        obstacles.splice(index, 1);
+                    }
+                });
+                
+                checkVictory();
+            }
+            
+            if (gameState === 'approaching' || gameState === 'kissing') {
+                // Move victory elements
+                if (victorySign.x > canvas.width - 350) {
+                    victorySign.x -= 3;
+                    girlfriend.x -= 3;
+                } else if (gameState === 'approaching') {
+                    gameState = 'moving';
+                }
+            }
+            
+            if (gameState === 'moving') {
+                // Move player towards girlfriend
+                if (player.x < girlfriend.x - 60) {
+                    player.x += 2;
+                    player.runFrame++;
+                } else {
+                    gameState = 'kissing';
+                    kissAnimation = 0;
+                }
+            }
+            
+            if (gameState === 'kissing') {
+                kissAnimation++;
+                
+                // Create explosion hearts
+                if (kissAnimation % 5 === 0 && kissAnimation < 100) {
+                    for (let i = 0; i < 3; i++) {
+                        const angle = Math.random() * Math.PI * 2;
+                        const speed = 2 + Math.random() * 3;
+                        celebrationHearts.push({
+                            x: player.x + 30,
+                            y: player.y + 20,
+                            size: 20 + Math.random() * 15,
+                            velocityX: Math.cos(angle) * speed,
+                            velocityY: Math.sin(angle) * speed - 2,
+                            life: 60,
+                            gravity: 0.2
+                        });
+                    }
+                }
+                
+                if (kissAnimation === 120) {
+                    gameState = 'won';
+                    document.getElementById('victoryScore').textContent = `¡Recorriste ${Math.floor(score)}m por amor! ❤️`;
+                    document.getElementById('victory').style.display = 'block';
+                    document.getElementById('instructions').style.display = 'none';
+                }
+            }
+            
+            // Update background hearts
+            hearts.forEach(heart => {
+                heart.x -= heart.speed;
+                if (heart.x < -50) {
+                    heart.x = canvas.width + 50;
+                    heart.y = Math.random() * canvas.height;
+                }
+            });
+            
+            // Update clouds
+            clouds.forEach(cloud => {
+                cloud.x -= cloud.speed;
+                if (cloud.x < -100) {
+                    cloud.x = canvas.width + 100;
+                    cloud.y = Math.random() * 200;
+                }
+            });
+            
+            // Update celebration hearts
+            celebrationHearts.forEach((heart, index) => {
+                if (heart.velocityX !== undefined) {
+                    heart.x += heart.velocityX;
+                    heart.velocityY += heart.gravity || 0;
+                }
+                heart.y += heart.velocityY;
+                heart.life--;
+                
+                if (heart.life <= 0) {
+                    celebrationHearts.splice(index, 1);
+                }
+            });
+        }
+        
+        function draw() {
+            // Clear canvas
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // Draw background hearts
+            hearts.forEach(heart => {
+                ctx.fillStyle = `rgba(255, 105, 180, ${heart.opacity})`;
+                drawHeart(heart.x, heart.y, heart.size);
+            });
+            
+            // Draw clouds
+            clouds.forEach(cloud => {
+                drawCloudHeart(cloud.x, cloud.y, cloud.size);
+            });
+            
+            // Draw ground
+            ctx.fillStyle = '#90EE90';
+            ctx.fillRect(0, 460, canvas.width, 140);
+            
+            // Draw grass details
+            ctx.fillStyle = '#228B22';
+            for (let i = 0; i < canvas.width; i += 20) {
+                ctx.fillRect(i, 460, 3, 10);
+            }
+            
+            // Draw victory sign if exists
+            if (victorySign) {
+                drawVictorySign(victorySign.x, victorySign.y);
+            }
+            
+            // Draw girlfriend if exists
+            if (girlfriend) {
+                drawGirlfriend(girlfriend.x, girlfriend.y);
+            }
+            
+            // Draw obstacles
+            obstacles.forEach(obs => {
+                drawGirl(obs.x, obs.y);
+            });
+            
+            // Draw player
+            drawPlayer(player.x, player.y);
+            
+            // Draw kiss hearts if kissing
+            if (gameState === 'kissing' && kissAnimation > 20 && kissAnimation < 50) {
+                ctx.fillStyle = '#FF1493';
+                drawHeart(player.x + 45, player.y + 15, 25);
+            }
+            
+            // Draw celebration hearts
+            celebrationHearts.forEach(heart => {
+                const alpha = heart.life / 30;
+                ctx.fillStyle = `rgba(255, 20, 147, ${alpha})`;
+                drawHeart(heart.x, heart.y, heart.size);
+            });
+        }
+        
+        function gameLoop() {
+            update();
+            draw();
+            requestAnimationFrame(gameLoop);
+        }
+        
+        gameLoop();
+    </script>
+</body>
+</html>
